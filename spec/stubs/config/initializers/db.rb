@@ -22,6 +22,10 @@ DB.create_table :oauth_applications do
   column :owner_id, Integer
   column :owner_type, String
   index [:owner_id, :owner_type]
+
+  # Optional private_key_jwt (RFC 7523) key material (Doorkeeper >= 6.0).
+  column :jwks, String, text: true
+  column :jwks_uri, String
 end
 
 DB.create_table :oauth_access_grants do
@@ -43,6 +47,11 @@ DB.create_table :oauth_access_grants do
 
   # Custom attribute used by Doorkeeper's custom_access_token_attributes specs.
   column :tenant_name, String
+
+  # RFC 8707 Resource Indicators (Doorkeeper >= 6.0).
+  column :resource, String, text: true
+  # Grant reuse revocation (Doorkeeper >= 6.0).
+  column :access_token_id, Integer, index: true
 end
 
 DB.create_table :oauth_access_tokens do
@@ -75,6 +84,11 @@ DB.create_table :oauth_access_tokens do
 
   # Custom attribute used by Doorkeeper's custom_access_token_attributes specs.
   column :tenant_name, String
+
+  # RFC 8707 Resource Indicators (Doorkeeper >= 6.0).
+  column :resource, String, text: true
+  # Refresh token keeps the originally granted scope, RFC 6749 §6 (Doorkeeper >= 6.0).
+  column :refresh_token_scopes, String, size: 255
 end
 
 DB.create_table :users do

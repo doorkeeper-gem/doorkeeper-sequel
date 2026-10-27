@@ -22,6 +22,13 @@ AR_ONLY_DESCRIPTION_PATTERNS = [
   # equivalent. The sibling "presence validator" example in this group does
   # pass (the owner association is gated on `enable_application_owner?`).
   /does not declare the belongs_to :owner association/,
+  # These build `Class.new(ApplicationRecord)` models or exercise the
+  # ActiveRecord read-replica (`connected_to`) role switching directly — no
+  # Sequel counterpart. The Sequel equivalents are covered by the model specs
+  # run against the Sequel Doorkeeper models.
+  /with a polymorphic resource owner/,
+  /performs the fallback upgrade through the primary database role/,
+  /Custom SAML bearer grant flow/,
 ].freeze
 
 RSpec.configure do |config|

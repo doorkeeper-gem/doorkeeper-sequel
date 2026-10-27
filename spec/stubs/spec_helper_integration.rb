@@ -13,6 +13,14 @@ require "generator_spec/test_case"
 # implicitly via Bundler. It's a dev dependency here, so require it explicitly.
 require "timecop"
 
+# Doorkeeper's specs (>= 6.0) stub external HTTP (private_key_jwt jwks_uri
+# fetching, the HttpFetcher SSRF tests) with WebMock.
+begin
+  require "webmock/rspec"
+  WebMock.disable_net_connect!
+rescue LoadError
+end
+
 # Load JRuby SQLite3 if in that platform
 begin
   require "jdbc/sqlite3"

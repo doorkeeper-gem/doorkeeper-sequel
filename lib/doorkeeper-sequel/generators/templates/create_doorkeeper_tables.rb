@@ -32,6 +32,12 @@ Sequel.migration do
       column :created_at, DateTime, null: false
       column :revoked_at, DateTime
       column :scopes, String, size: 255
+
+      # Authorization codes are single-use (RFC 6749 §4.1.2). Doorkeeper
+      # records the access token issued when the code is exchanged so that a
+      # second exchange attempt revokes the previously issued tokens
+      # (RFC 6749 §10.5). Comment out to disable that revocation.
+      column :access_token_id, Integer, index: true
     end
 
     create_table :oauth_access_tokens do
@@ -61,6 +67,12 @@ Sequel.migration do
       column :revoked_at, DateTime
       column :created_at, DateTime, null: false
       column :scopes, String, size: 255
+
+      # A refresh token keeps the scope originally granted by the resource
+      # owner, so a client that narrowed an access token on one refresh can
+      # request the granted scope again on the next (RFC 6749 §6). Comment
+      # out to let a narrowed refresh permanently narrow the refresh token.
+      column :refresh_token_scopes, String, size: 255
     end
   end
 end

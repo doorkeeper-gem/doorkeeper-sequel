@@ -22,7 +22,7 @@ module DoorkeeperSequel
 
       add_association_dependencies access_grants: :delete, access_tokens: :delete
 
-      set_allowed_columns :name, :redirect_uri, :scopes, :confidential
+      set_allowed_columns :name, :redirect_uri, :scopes, :confidential, :jwks, :jwks_uri
 
       def before_validation
         if new?
@@ -105,9 +105,8 @@ module DoorkeeperSequel
         app = by_uid(uid)
         return unless app
         return app if secret.blank? && !app.confidential?
-        return unless app.secret_matches?(secret)
 
-        app
+        app if app.secret_matches?(secret)
       end
 
       def by_uid(uid)
@@ -129,6 +128,30 @@ module DoorkeeperSequel
       def fallback_secret_strategy
         ::Doorkeeper.configuration.application_secret_fallback_strategy
       end
+
+      # SecretStorable write hook (Doorkeeper >= 6.0): persists the upgraded
+      # secret only while the row still holds the value the fallback lookup
+      # matched, so a concurrent secret change isn't clobbered. Writes the
+      # column directly (bypassing whitelist_security, which doesn't permit
+      # `secret`) and answers whether a row was written.
+      def write_upgraded_secret(instance, attr, matched, _upgraded)
+        upgraded = instance[attr.to_sym]
+        written = with_primary_role do
+          where(id: instance.id, attr.to_sym => matched).update(attr.to_sym => upgraded)
+        end
+        return false if written.zero?
+
+        instance.send(:changed_columns).delete(attr.to_sym)
+        true
+      end
+
+      # SecretStorable restore hook: put the matched value back on the
+      # instance directly and drop the pending change, so a later save does
+      # not write a value the row never held.
+      def restore_matched_secret(instance, attr, matched)
+        instance[attr.to_sym] = matched
+        instance.send(:changed_columns).delete(attr.to_sym)
+      end
     end
 
     def secret_matches?(input)
@@ -136,13 +159,17 @@ module DoorkeeperSequel
       # but Application secrets MAY be nil depending on confidentiality.
       return false if input.nil? || secret.nil?
 
+      input = input.to_s
+
       # When matching the secret by comparer function, all is well.
       return true if secret_strategy.secret_matches?(input, secret)
 
-      # When fallback lookup is enabled, ensure applications
-      # with plain secrets can still be found
-      if fallback_secret_strategy
-        fallback_secret_strategy.secret_matches?(input, secret)
+      # When fallback lookup is enabled, ensure applications with plain secrets
+      # can still be found, upgrading the stored secret to the active strategy
+      # on a successful match (Doorkeeper >= 6.0).
+      if fallback_secret_strategy&.secret_matches?(input, secret)
+        self.class.upgrade_fallback_value(self, :secret, input) if self.class.respond_to?(:upgrade_fallback_value)
+        true
       else
         false
       end

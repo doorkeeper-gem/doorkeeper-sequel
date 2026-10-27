@@ -5,8 +5,8 @@ source "https://rubygems.org"
 gemspec path: ".."
 
 # Keep the doorkeeper gem in lock-step with the vendored submodule (which
-# provides the shared spec suite). The submodule is currently at 5.9.x.
-gem "doorkeeper", "~> 5.9"
+# provides the shared spec suite). The submodule is currently at 6.0.0.rc.
+gem "doorkeeper", "6.0.0.rc2"
 
 gem "bcrypt", "~> 3.1"
 gem "rails", "~> 7.1.0"
@@ -14,6 +14,9 @@ gem "sequel", ">= 4.0"
 gem "sequel_polymorphic"
 gem "sprockets-rails"
 gem "sqlite3", "~> 1.6.0"
+# Doorkeeper >= 6.0 private_key_jwt (RFC 7523) + HTTP fetcher specs.
+gem "jwt", ">= 2.7"
+gem "webmock"
 
 group :test do
   gem "rspec-rails", "~> 6.0"

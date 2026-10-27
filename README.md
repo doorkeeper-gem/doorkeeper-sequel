@@ -8,9 +8,9 @@
 
 ## Requirements
 
-* Doorkeeper >= 5.6.6
+* Doorkeeper >= 5.6.6 && < 6.1 (including 6.0.0.rc)
 * Rails >= 7.0
-* Ruby >= 2.7
+* Ruby >= 2.7 (Doorkeeper 6.0 requires Ruby >= 3.2)
 * Sequel >= 4
 
 ## Installation
@@ -34,8 +34,8 @@ gem 'doorkeeper-sequel', '~> 2.1'
 gem 'doorkeeper', '~> 5.3'
 gem 'doorkeeper-sequel', '~> 2.2'
 
-# For Doorkeeper >= 5.6.6
-gem 'doorkeeper', '~> 5.9'
+# For Doorkeeper >= 5.6.6 (including 6.0.0.rc)
+gem 'doorkeeper', '>= 5.6.6', '< 6.1'
 gem 'doorkeeper-sequel', '~> 2.5'
 ```
 
@@ -63,6 +63,9 @@ rake doorkeeper_sequel:generate:confidential_applications
 rake doorkeeper_sequel:generate:pkce # for Doorkeeper >= 5.x
 rake doorkeeper_sequel:generate:polymorphic_resource_owner # for Doorkeeper >= 5.3
 rake doorkeeper_sequel:generate:remove_applications_secret_not_null_constraint # for Doorkeeper >= 5.8 (public clients)
+rake doorkeeper_sequel:generate:resource_indicators # for Doorkeeper >= 6.0 (RFC 8707)
+rake doorkeeper_sequel:generate:refresh_token_scopes # for Doorkeeper >= 6.0
+rake doorkeeper_sequel:generate:grant_reuse_revocation # for Doorkeeper >= 6.0
 ```
 
 ## Tests
