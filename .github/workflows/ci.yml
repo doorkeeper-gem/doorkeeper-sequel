@@ -8,7 +8,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pin the runner image: ubuntu-latest has moved to Ubuntu 26.04, which no
+    # longer ships prebuilt Ruby 3.1 binaries (ruby/setup-ruby 404s on it).
+    # 24.04 provides the whole 3.1–3.3 range this gem supports.
+    runs-on: ubuntu-24.04
     name: Ruby ${{ matrix.ruby }} / ${{ matrix.gemfile }}
 
     strategy:
@@ -25,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout (with Doorkeeper submodule)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
