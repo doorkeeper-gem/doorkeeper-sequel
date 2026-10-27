@@ -63,40 +63,49 @@ module DoorkeeperSequel
         find_by_plaintext_token(:refresh_token, refresh_token)
       end
 
-      def revoke_all_for(application_id, resource_owner, clock = Time)
-        where(application_id: application_id,
-              resource_owner_id: resource_owner.id,
-              revoked_at: nil)
-          .update(revoked_at: clock.now.utc)
+      # Returns non-revoked access tokens for the given resource owner.
+      def active_for(resource_owner)
+        by_resource_owner(resource_owner).where(revoked_at: nil)
       end
-	  
+
+      # Returns non-revoked and non-expired access tokens. A token with a
+      # NULL expires_in never expires.
+      def not_expired
+        where(revoked_at: nil).where(not_expired_condition)
+      end
+
+      def revoke_all_for(application_id, resource_owner, clock = Time)
+        with_primary_role do
+          by_resource_owner(resource_owner)
+            .where(application_id: application_id, revoked_at: nil)
+            .update(revoked_at: clock.now.utc)
+        end
+      end
+
       def by_previous_refresh_token(previous_refresh_token)
         where(refresh_token: previous_refresh_token).first
       end
 
-      def matching_token_for(application, resource_owner_or_id, scopes)
+      def matching_token_for(application, resource_owner_or_id, scopes, custom_attributes: nil, include_expired: true)
         resource_owner_id = if resource_owner_or_id.respond_to?(:to_key)
                               resource_owner_or_id.id
                             else
                               resource_owner_or_id
                             end
-        tokens = authorized_tokens_for(application.try(:id), resource_owner_id).all
-        tokens.detect do |token|
-          scopes_match?(token.scopes, scopes, application.try(:scopes))
-        end
+        tokens = authorized_tokens_for(application.try(:id), resource_owner_id)
+        tokens = tokens.where(not_expired_condition) unless include_expired
+        find_matching_token(tokens, application, custom_attributes, scopes)
       end
 
-      def find_matching_token(relation, application, scopes)
+      def find_matching_token(relation, application, custom_attributes, scopes)
         return nil unless relation
 
-        matching_tokens = []
-
-        tokens = relation.select do |token|
-          scopes_match?(token.scopes, scopes, application.try(:scopes))
+        tokens = relation.all.select do |token|
+          scopes_match?(token.scopes, scopes, application.try(:scopes)) &&
+            custom_attributes_match?(token, custom_attributes)
         end
 
-        matching_tokens.concat(tokens)
-        matching_tokens.max_by(&:created_at)
+        tokens.max_by(&:created_at)
       end
 
       def scopes_match?(token_scopes, param_scopes, app_scopes)
@@ -110,44 +119,44 @@ module DoorkeeperSequel
           )
       end
 
+      # Checks whether the token's custom attribute values match those
+      # given in +custom_attributes+. A nil value ignores custom attributes.
+      def custom_attributes_match?(token, custom_attributes)
+        return true if custom_attributes.nil?
+
+        token_attribs = token.custom_attributes
+        return true if token_attribs.blank? && custom_attributes.blank?
+
+        Doorkeeper.config.custom_access_token_attributes.all? do |attribute|
+          token_attribs[attribute] == custom_attributes[attribute]
+        end
+      end
+
       def authorized_tokens_for(application_id, resource_owner)
         by_resource_owner(resource_owner).where(application_id: application_id,
               revoked_at: nil).order(Sequel.desc(:created_at))
       end
 
-      def find_or_create_for(*args)
-	     attributes = if args.size > 1
-                         {
-                           application: args[0],
-                           resource_owner: args[1],
-                           scopes: args[2],
-                           expires_in: args[3],
-                           use_refresh_token: args[4],
-                         }
-                      else
-                         args.first
-                      end		
-		
-        application = attributes[:application]
-        resource_owner = attributes[:resource_owner]
-        scopes = attributes[:scopes]
-        expires_in = attributes[:expires_in]
-        use_refresh_token = attributes[:use_refresh_token]
-        
+      def find_or_create_for(application:, resource_owner:, scopes:, **token_attributes)
         if Doorkeeper.configuration.reuse_access_token
-          access_token = matching_token_for(application, resource_owner, scopes)
+          # nil ignores custom attributes when matching, an empty hash only
+          # matches tokens that have no custom attributes set.
+          custom_attributes = extract_custom_attributes(token_attributes)
+          access_token = matching_token_for(
+            application, resource_owner, scopes,
+            custom_attributes: custom_attributes, include_expired: false
+          )
           return access_token if access_token&.reusable?
         end
-        
+
         create_for(
           application: application,
           resource_owner: resource_owner,
           scopes: scopes,
-          expires_in: expires_in,
-          use_refresh_token: use_refresh_token,
+          **token_attributes
         )
       end
-	  
+
       def create_for(application:, resource_owner:, scopes:, **token_attributes)
         token_attributes[:application_id] = application&.id
         token_attributes[:scopes] = scopes.to_s
@@ -158,7 +167,9 @@ module DoorkeeperSequel
           token_attributes[:resource_owner_id] = resource_owner_id_for(resource_owner)
         end
 
-        create!(token_attributes)
+        with_primary_role do
+          create!(token_attributes)
+        end
       end
 
       def last_authorized_token_for(application_id, resource_owner_id)
@@ -175,6 +186,14 @@ module DoorkeeperSequel
 
       def polymorphic_resource_owner?
         columns.include?(:resource_owner_type)
+      end
+
+      # Extracts the custom attributes (configured with the
+      # `custom_access_token_attributes` option) from the given attributes.
+      def extract_custom_attributes(attributes)
+        attributes.stringify_keys.slice(
+          *Doorkeeper.configuration.custom_access_token_attributes.map(&:to_s)
+        ).symbolize_keys
       end
     end
 
@@ -201,10 +220,25 @@ module DoorkeeperSequel
       end
     end
 	
+    # The token's custom attributes, as defined by the
+    # custom_access_token_attributes config option. Keys are symbols to match
+    # the configured attribute names.
+    def custom_attributes
+      self.class.extract_custom_attributes(attributes.symbolize_keys)
+    end
+
     # It indicates whether the tokens have the same credential
     def same_credential?(access_token)
       application_id == access_token.application_id &&
+        same_resource_owner?(access_token)
+    end
+
+    def same_resource_owner?(access_token)
+      if Doorkeeper.configuration.polymorphic_resource_owner?
+        resource_owner == access_token.resource_owner
+      else
         resource_owner_id == access_token.resource_owner_id
+      end
     end
 
     def acceptable?(scopes)
@@ -231,7 +265,7 @@ module DoorkeeperSequel
     # and clears `:previous_refresh_token` attribute.
     #
     def revoke_previous_refresh_token!
-      return unless self.class.refresh_token_revoked_on_use?
+      return if !self.class.refresh_token_revoked_on_use? || previous_refresh_token.blank?
 
       old_refresh_token&.revoke
       update(previous_refresh_token: "")
@@ -251,15 +285,29 @@ module DoorkeeperSequel
     def generate_token
       self[:created_at] ||= Time.now.utc
 
-      @raw_token = token_generator.generate(
+      @raw_token = token_generator.generate(attributes_for_token_generator)
+      secret_strategy.store_secret(self, :token, @raw_token)
+      @raw_token
+    end
+
+    # Set of attributes passed to the token generator. Includes any
+    # configured custom access token attributes.
+    def attributes_for_token_generator
+      {
         resource_owner_id: resource_owner_id,
         scopes: scopes,
         application: application,
         expires_in: expires_in,
-        created_at: created_at
-      )
-      secret_strategy.store_secret(self, :token, @raw_token)
-      @raw_token
+        created_at: created_at,
+      }.tap do |attrs|
+        if Doorkeeper.config.polymorphic_resource_owner?
+          attrs[:resource_owner] = resource_owner
+        end
+
+        Doorkeeper.config.custom_access_token_attributes.each do |attribute_name|
+          attrs[attribute_name] = public_send(attribute_name)
+        end
+      end
     end
 
     def token_generator

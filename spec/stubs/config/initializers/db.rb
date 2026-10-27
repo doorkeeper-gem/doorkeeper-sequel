@@ -40,6 +40,9 @@ DB.create_table :oauth_access_grants do
 
   column :code_challenge, String
   column :code_challenge_method, String
+
+  # Custom attribute used by Doorkeeper's custom_access_token_attributes specs.
+  column :tenant_name, String
 end
 
 DB.create_table :oauth_access_tokens do
@@ -69,6 +72,9 @@ DB.create_table :oauth_access_tokens do
   column :revoked_at, DateTime
   column :created_at, DateTime, null: false
   column :scopes, String, size: 255
+
+  # Custom attribute used by Doorkeeper's custom_access_token_attributes specs.
+  column :tenant_name, String
 end
 
 DB.create_table :users do

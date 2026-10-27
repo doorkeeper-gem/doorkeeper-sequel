@@ -9,6 +9,10 @@ require "dummy/config/environment"
 require "rspec/rails"
 require "generator_spec/test_case"
 
+# Doorkeeper's specs (>= 5.9) rely on Timecop, which its own Gemfile requires
+# implicitly via Bundler. It's a dev dependency here, so require it explicitly.
+require "timecop"
+
 # Load JRuby SQLite3 if in that platform
 begin
   require "jdbc/sqlite3"
@@ -21,6 +25,7 @@ Rails.logger.info "====> Rails version: #{Rails.version}"
 Rails.logger.info "====> Ruby version: #{RUBY_VERSION}"
 
 require "support/orm/#{DOORKEEPER_ORM}"
+require "support/render_with_matcher"
 
 ENGINE_RAILS_ROOT = File.join(File.dirname(__FILE__), "../")
 

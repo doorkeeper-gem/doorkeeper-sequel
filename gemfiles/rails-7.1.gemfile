@@ -1,0 +1,20 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec path: ".."
+
+# Keep the doorkeeper gem in lock-step with the vendored submodule (which
+# provides the shared spec suite). The submodule is currently at 5.9.x.
+gem "doorkeeper", "~> 5.9"
+
+gem "bcrypt", "~> 3.1"
+gem "rails", "~> 7.1.0"
+gem "sequel", ">= 4.0"
+gem "sequel_polymorphic"
+gem "sprockets-rails"
+gem "sqlite3", "~> 1.6.0"
+
+group :test do
+  gem "rspec-rails", "~> 6.0"
+end

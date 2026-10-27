@@ -25,4 +25,4 @@ en:
               forbidden_uri: 'is forbidden by the server.'
               unspecified_scheme: 'must specify a scheme.'
             scopes:
-              not_match_configured: "doesn't match configured on the server."
+              not_match_configured: "doesn't match those configured on the server."

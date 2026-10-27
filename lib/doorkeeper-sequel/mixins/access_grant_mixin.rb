@@ -17,7 +17,7 @@ module DoorkeeperSequel
       plugin :timestamps
       many_to_one :application, class: "Doorkeeper::Application"
 
-      set_allowed_columns :resource_owner_id, :application_id,
+      set_allowed_columns :resource_owner_id, :resource_owner_type, :application_id,
                           :expires_in, :redirect_uri, :scopes, :code_challenge, :code_challenge_method,
                           :token
 
@@ -44,10 +44,12 @@ module DoorkeeperSequel
       end
 
       def revoke_all_for(application_id, resource_owner, clock = Time)
-        where(application_id: application_id,
-              resource_owner_id: resource_owner.id,
-              revoked_at: nil)
-          .update(revoked_at: clock.now.utc)
+        with_primary_role do
+          where(application_id: application_id,
+                resource_owner_id: resource_owner.id,
+                revoked_at: nil)
+            .update(revoked_at: clock.now.utc)
+        end
       end
 
       def generate_code_challenge(code_verifier)
