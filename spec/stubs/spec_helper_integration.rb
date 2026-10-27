@@ -25,6 +25,7 @@ Rails.logger.info "====> Rails version: #{Rails.version}"
 Rails.logger.info "====> Ruby version: #{RUBY_VERSION}"
 
 require "support/orm/#{DOORKEEPER_ORM}"
+require "support/render_with_matcher"
 
 ENGINE_RAILS_ROOT = File.join(File.dirname(__FILE__), "../")
 

@@ -87,10 +87,21 @@ module DoorkeeperSequel
         new(values, &block).save(raise_on_failure: true)
       end
 
-      # Doorkeeper's read-replica / automatic role switching support
-      # (`enable_multiple_database_roles`) is tied to ActiveRecord's
-      # `connected_to`. Sequel manages its own connections, so there is no
-      # role to switch to and we simply execute the block.
+      # Executes the given block against the primary (writable) database.
+      #
+      # This is the Sequel counterpart to Doorkeeper's ActiveRecord
+      # read-replica support (`enable_multiple_database_roles`, which wraps
+      # writes in `connected_to(role: :writing)` because AR may route a GET
+      # request to a read replica).
+      #
+      # Sequel models the read/write split with *servers/shards* on a single
+      # `Sequel::Database`: writes (INSERT/UPDATE/DELETE) are always sent to
+      # the `:default` (primary) server, and only reads are routed to a
+      # replica when a dataset explicitly opts in with `.server(:replica)`.
+      # Because Sequel never sends a write to a replica implicitly, there is
+      # no role to switch for the write path — we just run the block.
+      #
+      # @see https://sequel.jeremyevans.net/rdoc/files/doc/sharding_rdoc.html
       def with_primary_role
         yield
       end
