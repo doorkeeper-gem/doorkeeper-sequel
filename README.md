@@ -1,6 +1,6 @@
 # Doorkeeper Sequel ORM extension
 [![Gem Version](https://badge.fury.io/rb/doorkeeper-sequel.svg)](https://rubygems.org/gems/doorkeeper-sequel)
-[![Build Status](https://travis-ci.org/nbulaj/doorkeeper-sequel.svg?branch=master)](https://travis-ci.org/nbulaj/doorkeeper-sequel)
+[![Build Status](https://github.com/nbulaj/doorkeeper-sequel/actions/workflows/ci.yml/badge.svg)](https://github.com/nbulaj/doorkeeper-sequel/actions/workflows/ci.yml)
 [![Code Climate](https://codeclimate.com/github/nbulaj/doorkeeper-sequel/badges/gpa.svg)](https://codeclimate.com/github/nbulaj/doorkeeper-sequel)
 [![License](http://img.shields.io/badge/license-MIT-brightgreen.svg)](#license)
 
