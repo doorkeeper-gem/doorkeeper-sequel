@@ -7,7 +7,11 @@ module DoorkeeperSequel
     protected
 
     def create_migration(template_name)
-      copy_file template_name, migration_filename_for(template_name)
+      # Normalize the given name to a bare migration name (callers have
+      # historically passed it with and without extensions), then resolve a
+      # single `.rb` Sequel migration template to copy into db/migrate.
+      name = template_name.to_s.sub(/\.rb(\.erb)?\z/, "")
+      copy_file "#{name}.rb", migration_filename_for(name)
     end
 
     def migration_template
@@ -17,7 +21,7 @@ module DoorkeeperSequel
     private
 
     def migration_filename_for(template_name)
-      "db/migrate/#{new_migration_number}_#{template_name}"
+      "db/migrate/#{new_migration_number}_#{template_name}.rb"
     end
 
     def new_migration_number

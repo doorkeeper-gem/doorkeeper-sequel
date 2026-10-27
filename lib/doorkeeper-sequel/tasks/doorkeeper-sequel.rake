@@ -27,6 +27,11 @@ namespace :doorkeeper_sequel do
       DoorkeeperSequel::ConfidentialApplicationsGenerator.start
     end
 
+    desc "Remove NOT NULL constraint from Doorkeeper applications secret column"
+    task :remove_applications_secret_not_null_constraint do
+      DoorkeeperSequel::RemoveApplicationsSecretNotNullConstraintGenerator.start
+    end
+
     desc "Add resource owner type to Access tokens and grants"
     task :polymorphic_resource_owner do
       DoorkeeperSequel::PolymorphicResourceOwnerGenerator.start
