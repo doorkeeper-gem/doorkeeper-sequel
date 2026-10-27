@@ -38,6 +38,8 @@ module DoorkeeperSequel
       end
 
       def forbidden_uri?(uri)
+        return true if ::Doorkeeper::OAuth::Helpers::URIChecker.script_scheme?(uri)
+
         Doorkeeper.configuration.respond_to?(:forbid_redirect_uri) &&
           Doorkeeper.configuration.forbid_redirect_uri.call(uri)
       end
@@ -63,11 +65,11 @@ module DoorkeeperSequel
 	  
 	  
       def unspecified_host?(uri)
-        uri.is_a?(URI::HTTP) && uri.host.nil?
+        uri.is_a?(URI::HTTP) && uri.host.blank?
       end
 
       def relative_uri?(uri)
-        uri.scheme.nil? && uri.host.nil?
+        uri.scheme.nil? && uri.host.blank?
       end
 
       def invalid_ssl_uri?(uri)

@@ -4,7 +4,22 @@ Reverse Chronological Order:
 
 ## master
 
-https://github.com/nbulaj/doorkeeper-sequel/compare/2.0.0...master
+https://github.com/nbulaj/doorkeeper-sequel/compare/2.5.0...master
+
+## `2.5.0`
+
+* Support for Doorkeeper up to 5.9.x
+* Add support for custom access token attributes (`custom_access_token_attributes`)
+* Support nullable application secrets for public clients (Doorkeeper >= 5.8)
+* Honor the `application_secret_generator` configuration option
+* Reject redirect URIs with a script scheme (`javascript`, `vbscript`, `data`)
+  and require a host, matching the Doorkeeper 5.9.9 security fixes
+* Exclude endless (`expires_in IS NULL`) tokens from `StaleRecordsCleaner` and
+  use per-adapter expiration-time math when cleaning/matching tokens
+* Store and read timestamps as UTC (`Sequel.default_timezone = :utc`) so token
+  expiration math is correct regardless of the host system timezone
+* Add `active_for`, `not_expired`, `same_resource_owner?` and a no-op
+  `with_primary_role` to keep parity with the ActiveRecord ORM mixins
 
 ## `2.4.0` (2021-03-11)
 

@@ -9,6 +9,10 @@ require "dummy/config/environment"
 require "rspec/rails"
 require "generator_spec/test_case"
 
+# Doorkeeper's specs (>= 5.9) rely on Timecop, which its own Gemfile requires
+# implicitly via Bundler. It's a dev dependency here, so require it explicitly.
+require "timecop"
+
 # Load JRuby SQLite3 if in that platform
 begin
   require "jdbc/sqlite3"

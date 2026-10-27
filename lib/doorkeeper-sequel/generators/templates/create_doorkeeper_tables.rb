@@ -7,6 +7,8 @@ Sequel.migration do
 
       column :name, String, size: 255, null: false
       column :uid, String, size: 255, null: false, index: { unique: true }
+      # Remove `null: false` if you are planning to use public clients
+      # (Doorkeeper >= 5.8 allows applications with a blank secret).
       column :secret, String, size: 255, null: false
 
       column :scopes, String, size: 255, null: false, default: ""

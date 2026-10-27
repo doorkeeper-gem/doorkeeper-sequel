@@ -34,7 +34,8 @@ module DoorkeeperSequel
 
       def validate
         super
-        validates_presence %i[name secret uid]
+        validates_presence %i[name uid]
+        validates_presence [:secret] if secret_required?
         validates_unique [:uid]
         validates_redirect_uri :redirect_uri
         validates_includes [true, false], :confidential, allow_missing: true
@@ -55,7 +56,7 @@ module DoorkeeperSequel
       end
 	  
       def renew_secret
-        @raw_secret = Doorkeeper::OAuth::Helpers::UniqueToken.generate
+        @raw_secret = secret_generator.generate
         secret_strategy.store_secret(self, :secret, @raw_secret)
       end
 	  	  
@@ -178,10 +179,32 @@ module DoorkeeperSequel
     end
 
     def generate_secret
-      return unless secret.blank?
+      return if secret.present? || !secret_required?
 
-      @raw_secret = UniqueToken.generate
-      secret_strategy.store_secret(self, :secret, @raw_secret)
+      renew_secret
+    end
+
+    # Secret generator class configured via `application_secret_generator`
+    # (Doorkeeper >= 5.x). Defaults to the UniqueToken generator.
+    def secret_generator
+      generator_name = Doorkeeper.config.application_secret_generator
+      generator = generator_name.constantize
+
+      return generator if generator.respond_to?(:generate)
+
+      raise Doorkeeper::Errors::UnableToGenerateToken, "#{generator} does not respond to `.generate`."
+    rescue NameError
+      raise Doorkeeper::Errors::TokenGeneratorNotFound, "#{generator_name} not found"
+    end
+
+    # A secret is required when the application is confidential or when the
+    # database column itself disallows NULL. Public clients with a nullable
+    # secret column may have a blank secret (Doorkeeper >= 5.8).
+    def secret_required?
+      return true if confidential?
+
+      column = self.class.db_schema[:secret]
+      column.nil? || !column[:allow_null]
     end
   end
 end

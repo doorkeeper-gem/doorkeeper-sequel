@@ -33,6 +33,8 @@ class ExtensionIntegrator
       FileUtils.cp_r("spec/stubs/config/initializers/db.rb", "spec/dummy/config/initializers/db.rb")
       FileUtils.cp_r("spec/stubs/config/application.rb", "spec/dummy/config/application.rb")
       FileUtils.cp_r("spec/stubs/support/sequel.rb", "spec/support/orm/sequel.rb")
+      # Sequel-aware factories (persist associations before assignment)
+      FileUtils.cp_r("spec/stubs/factories.rb", "spec/factories.rb")
       FileUtils.rm("spec/dummy/config/initializers/active_record_belongs_to_required_by_default.rb", force: true)
       FileUtils.rm("spec/dummy/config/initializers/new_framework_defaults.rb", force: true)
       FileUtils.rm("spec/models/doorkeeper/base_record_spec.rb", force: true)

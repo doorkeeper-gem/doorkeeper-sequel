@@ -15,6 +15,17 @@ module Doorkeeper
         ::Sequel::Model.plugin :json_serializer
         ::Sequel::Model.plugin :polymorphic
 
+        # Store and read timestamps as UTC so expiration math stays correct
+        # regardless of the host application's system timezone. Doorkeeper
+        # works entirely in UTC (e.g. #generate_token sets created_at to
+        # Time.now.utc); without this Sequel would reinterpret naive datetime
+        # columns in the local zone on read.
+        ::Sequel.default_timezone = :utc
+
+        # `Sequel.date_add` (used for expiration-time math when matching and
+        # cleaning tokens) lives in the date_arithmetic extension.
+        ::Sequel.extension :date_arithmetic
+
         begin
           require "doorkeeper/orm/sequel/access_grant"
           require "doorkeeper/orm/sequel/access_token"
