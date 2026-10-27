@@ -18,7 +18,10 @@ AR_ONLY_DESCRIPTION_PATTERNS = [
   /read replica support/,
   /application_owner is enabled/,
   /as_json when called with authorized resource owner/,
-  /does not declare the/,
+  # `reflect_on_association` is an ActiveRecord reflection API with no Sequel
+  # equivalent. The sibling "presence validator" example in this group does
+  # pass (the owner association is gated on `enable_application_owner?`).
+  /does not declare the belongs_to :owner association/,
 ].freeze
 
 RSpec.configure do |config|

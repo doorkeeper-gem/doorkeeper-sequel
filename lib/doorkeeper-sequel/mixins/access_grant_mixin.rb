@@ -17,7 +17,7 @@ module DoorkeeperSequel
       plugin :timestamps
       many_to_one :application, class: "Doorkeeper::Application"
 
-      set_allowed_columns :resource_owner_id, :application_id,
+      set_allowed_columns :resource_owner_id, :resource_owner_type, :application_id,
                           :expires_in, :redirect_uri, :scopes, :code_challenge, :code_challenge_method,
                           :token
 

@@ -28,28 +28,6 @@ module DoorkeeperSequel
                                            :expires_in, :scopes, :use_refresh_token, 
                                            :previous_refresh_token, :token, :refresh_token
 
-      # Custom access token attributes (Doorkeeper >= 5.6) are configurable at
-      # runtime, so they can't be baked into the static allowed-columns list
-      # above. Permit any configured + existing custom attribute column on
-      # assignment by stripping it out and setting it directly (bypassing the
-      # whitelist_security plugin), then let the normal path handle the rest.
-      def set(hash)
-        custom = Doorkeeper.config.custom_access_token_attributes
-        unless custom.empty?
-          hash = hash.dup
-          custom.each do |attr|
-            next unless self.class.columns.include?(attr.to_sym)
-
-            if hash.key?(attr)
-              self[attr.to_sym] = hash.delete(attr)
-            elsif hash.key?(attr.to_s)
-              self[attr.to_sym] = hash.delete(attr.to_s)
-            end
-          end
-        end
-        super(hash)
-      end
-
       def before_validation
         if new?
           generate_token

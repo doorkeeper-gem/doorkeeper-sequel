@@ -49,6 +49,33 @@ module DoorkeeperSequel
         values.each_with_object({}) { |(k, v), memo| memo[k.to_s] = v }
       end
 
+      # Permit configured custom access token attributes (Doorkeeper >= 5.6)
+      # on mass-assignment. They are configurable at runtime, so they can't be
+      # baked into the static `set_allowed_columns` lists of the AccessToken /
+      # AccessGrant mixins. We pull any configured + existing custom column out
+      # of the hash and assign it directly (bypassing whitelist_security),
+      # letting the normal whitelisted path handle the remaining attributes.
+      #
+      # This matters on the real write path (e.g. AccessGrant.create! during
+      # the authorization code flow, which merges custom attributes into the
+      # grant so they can be copied onto the issued access token).
+      def set(hash)
+        custom = Doorkeeper.config.custom_access_token_attributes
+        unless custom.empty?
+          hash = hash.dup
+          custom.each do |attr|
+            next unless self.class.columns.include?(attr.to_sym)
+
+            if hash.key?(attr)
+              self[attr.to_sym] = hash.delete(attr)
+            elsif hash.key?(attr.to_s)
+              self[attr.to_sym] = hash.delete(attr.to_s)
+            end
+          end
+        end
+        super(hash)
+      end
+
       def save!(*)
         save(raise_on_failure: true)
       end
