@@ -19,7 +19,7 @@ module DoorkeeperSequel
 
       set_allowed_columns :resource_owner_id, :resource_owner_type, :application_id,
                           :expires_in, :redirect_uri, :scopes, :code_challenge, :code_challenge_method,
-                          :token
+                          :token, :resource, :access_token_id
 
       def before_validation
         generate_token if new?
@@ -59,6 +59,19 @@ module DoorkeeperSequel
 
       def pkce_supported?
         new.pkce_supported?
+      end
+
+      # RFC 8707: resource indicators are supported only when the `resource`
+      # column exists (added by the `doorkeeper:resource_indicators` generator).
+      def resource_indicators_supported?
+        column_names.include?("resource")
+      end
+
+      # Authorization-code replay revocation (RFC 6749 §4.1.2, §10.5) is
+      # active only when the `access_token_id` column exists (added by the
+      # `doorkeeper:grant_reuse_revocation` generator).
+      def access_token_revoked_on_reuse?
+        column_names.include?("access_token_id")
       end
 
       def secret_strategy

@@ -4,7 +4,32 @@ Reverse Chronological Order:
 
 ## master
 
-https://github.com/nbulaj/doorkeeper-sequel/compare/2.5.0...master
+https://github.com/doorkeeper-gem/doorkeeper-sequel/compare/2.5.0...master
+
+* Allow Doorkeeper 6.0 (including `6.0.0.rc`): relax the dependency to
+  `>= 5.6.6` and `< 6.1`. The extension supports both the 5.x and 6.0 lines,
+  with the 6.0-only features activating only when their columns / config /
+  library methods are present.
+* Add support for Resource Indicators (RFC 8707): the `resource` column is
+  honored on access grants and tokens, token reuse is audience-restricted
+  (`resource_indicators_match?`), and a `doorkeeper_sequel:generate:resource_indicators`
+  migration generator is provided.
+* Add support for the `refresh_token_scopes` column (RFC 6749 §6): a refresh
+  token keeps the originally granted scope across narrowing refreshes, with a
+  `doorkeeper_sequel:generate:refresh_token_scopes` generator.
+* Add support for authorization-code reuse revocation via the grant
+  `access_token_id` column, with a `doorkeeper_sequel:generate:grant_reuse_revocation`
+  generator.
+* Honor `private_key_jwt` client authentication (RFC 7523): the optional
+  `jwks` / `jwks_uri` application attributes are mass-assignable.
+* Upgrade a plain application secret to the active strategy on a successful
+  fallback match (Sequel conditional write), matching Doorkeeper 6.0.
+* Add ActiveRecord-compatible helpers used by Doorkeeper 6.0
+  (`where.not`, `exists?(id)`, `update_columns`, `destroy!`, identity-based
+  `==`/`eql?`/`hash`).
+* Forward-compatible ORM wiring: define `run_hooks` (silencing the
+  `setup_orm_models` deprecation) and gate the application owner association
+  on `enable_application_owner?`.
 
 ## `2.5.0`
 

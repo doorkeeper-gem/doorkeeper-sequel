@@ -1,6 +1,19 @@
 # frozen_string_literal: true
 
 module DoorkeeperSequel
+  # Minimal stand-in for ActiveRecord's `WhereChain`, returned by a
+  # no-argument `where` on our model datasets so that Doorkeeper core's
+  # `relation.where.not(conditions)` works on Sequel (mapped to `#exclude`).
+  class WhereChain
+    def initialize(dataset)
+      @dataset = dataset
+    end
+
+    def not(*args, &block)
+      @dataset.exclude(*args, &block)
+    end
+  end
+
   module SequelCompat
     extend ActiveSupport::Concern
 
@@ -20,6 +33,22 @@ module DoorkeeperSequel
         def size
           count
         end
+
+        # ActiveRecord-style `where.not(conditions)`. Doorkeeper >= 6.0 uses
+        # `relation.where.not(...)` (e.g. authorization-code reuse revocation).
+        # Sequel's #where requires arguments, so a no-argument call returns a
+        # tiny chain object whose #not maps to Sequel's #exclude.
+        def where(*args, &block)
+          return WhereChain.new(self) if args.empty? && block.nil?
+
+          super
+        end
+
+        # ActiveRecord-style dataset predicate used by Doorkeeper core
+        # (e.g. `relation.where(...).where.not(...).exists?`).
+        def exists?
+          !empty?
+        end
       end
 
       def update_attribute(column, value)
@@ -29,8 +58,22 @@ module DoorkeeperSequel
 
       alias_method :update_column, :update_attribute
 
+      # ActiveRecord-style #update_columns: write the given columns directly,
+      # skipping validations and callbacks. Used by Doorkeeper's grant reuse
+      # revocation path and specs.
+      def update_columns(values)
+        values.each { |column, value| self[column.to_sym] = value }
+        save(columns: values.keys.map(&:to_sym), validate: false)
+      end
+
       def update_attributes(*args)
         update(*args)
+      end
+
+      # ActiveRecord-style #destroy! — Sequel's #destroy already raises on
+      # failure (with raise_on_failure), so alias it for API compatibility.
+      def destroy!
+        destroy
       end
 
       # ActiveModel-style bang update used by Doorkeeper core and its specs.
@@ -73,6 +116,20 @@ module DoorkeeperSequel
             end
           end
         end
+
+        # `refresh_token_scopes` (Doorkeeper >= 6.0, RFC 6749 §6) must be
+        # assigned through its dedicated writer, not the whitelist, so that
+        # the "explicitly granted scope" flag is set and #generate_refresh_token
+        # does not overwrite it with the (possibly narrowed) access token scope.
+        if respond_to?(:refresh_token_scopes=)
+          if hash.key?(:refresh_token_scopes) || hash.key?("refresh_token_scopes")
+            hash = hash.dup
+            value = hash.delete(:refresh_token_scopes)
+            value = hash.delete("refresh_token_scopes") if value.nil?
+            self.refresh_token_scopes = value
+          end
+        end
+
         super(hash)
       end
 
@@ -86,6 +143,24 @@ module DoorkeeperSequel
 
       def invalid?
         !valid?
+      end
+
+      # ActiveRecord compares persisted records by identity (same class and
+      # primary key), whereas Sequel's default #== compares all column values.
+      # Doorkeeper's shared specs (and some of its code) rely on AR semantics —
+      # e.g. an application whose stored secret was upgraded in place is still
+      # "the same" application it was looked up as. Match AR here.
+      def ==(other)
+        return super if id.nil?
+
+        other.is_a?(self.class) && !other.id.nil? && other.id == id
+      end
+      alias_method :eql?, :==
+
+      def hash
+        return super if id.nil?
+
+        [self.class, id].hash
       end
 
       def exists?
@@ -137,6 +212,13 @@ module DoorkeeperSequel
         db.table_exists?(table_name)
       end
 
+      # ActiveRecord-style string column names. Doorkeeper's model mixins use
+      # `column_names.include?("...")` for optional-column feature detection
+      # (e.g. previous_refresh_token, resource, refresh_token_scopes).
+      def column_names
+        columns.map(&:to_s)
+      end
+
       def ordered_by(attribute, direction = :asc)
         order(::Sequel.public_send(direction, attribute))
       end
@@ -151,12 +233,16 @@ module DoorkeeperSequel
         end
       end
 
+      # ActiveRecord-style `exists?`:
+      #   exists?            -> any row?
+      #   exists?(id)        -> row with that primary key?
+      #   exists?(name: ...) -> row matching conditions?
       def exists?(*args)
-        if args.any?
-          !where(*args).empty?
-        else
-          !empty?
-        end
+        return !empty? if args.empty?
+
+        conditions = args.first
+        conditions = { primary_key => conditions } unless conditions.is_a?(Hash)
+        !where(conditions).empty?
       end
 
       # SQL expression computing the number of seconds elapsed since the

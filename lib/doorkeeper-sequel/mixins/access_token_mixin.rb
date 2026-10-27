@@ -23,10 +23,10 @@ module DoorkeeperSequel
       many_to_one :resource_owner, polymorphic: true
 
       attr_writer :use_refresh_token
-
       set_allowed_columns :application_id, :resource_owner_id, :resource_owner_type,
                                            :expires_in, :scopes, :use_refresh_token, 
-                                           :previous_refresh_token, :token, :refresh_token
+                                           :previous_refresh_token, :token, :refresh_token,
+                                           :resource
 
       def before_validation
         if new?
@@ -69,9 +69,18 @@ module DoorkeeperSequel
       end
 
       # Returns non-revoked and non-expired access tokens. A token with a
-      # NULL expires_in never expires.
+      # NULL expires_in never expires. When the database adapter has no
+      # expiration-time math (parity with Doorkeeper >= 6.0), warn and return
+      # the relation filtered only by revocation.
       def not_expired
-        where(revoked_at: nil).where(not_expired_condition)
+        relation = where(revoked_at: nil)
+
+        unless supports_expiration_time_math?
+          ::Kernel.warn(::Doorkeeper::Models::ExpirationTimeSqlMath::WARNING_MESSAGE)
+          return relation
+        end
+
+        relation.where(not_expired_condition)
       end
 
       def revoke_all_for(application_id, resource_owner, clock = Time)
@@ -86,7 +95,7 @@ module DoorkeeperSequel
         where(refresh_token: previous_refresh_token).first
       end
 
-      def matching_token_for(application, resource_owner_or_id, scopes, custom_attributes: nil, include_expired: true)
+      def matching_token_for(application, resource_owner_or_id, scopes, custom_attributes: nil, include_expired: true, &filter)
         resource_owner_id = if resource_owner_or_id.respond_to?(:to_key)
                               resource_owner_or_id.id
                             else
@@ -94,15 +103,16 @@ module DoorkeeperSequel
                             end
         tokens = authorized_tokens_for(application.try(:id), resource_owner_id)
         tokens = tokens.where(not_expired_condition) unless include_expired
-        find_matching_token(tokens, application, custom_attributes, scopes)
+        find_matching_token(tokens, application, custom_attributes, scopes, &filter)
       end
 
-      def find_matching_token(relation, application, custom_attributes, scopes)
+      def find_matching_token(relation, application, custom_attributes, scopes, &filter)
         return nil unless relation
 
         tokens = relation.all.select do |token|
           scopes_match?(token.scopes, scopes, application.try(:scopes)) &&
-            custom_attributes_match?(token, custom_attributes)
+            custom_attributes_match?(token, custom_attributes) &&
+            (filter.nil? || filter.call(token))
         end
 
         tokens.max_by(&:created_at)
@@ -132,6 +142,46 @@ module DoorkeeperSequel
         end
       end
 
+      # Candidate's refresh-token presence must match what the request asks
+      # for, in both directions (Doorkeeper >= 6.0 token reuse rule).
+      def refresh_token_matches?(access_token, token_attributes)
+        access_token.refresh_token.present? == !!token_attributes[:use_refresh_token]
+      end
+
+      # Candidate's refresh token must carry the scope the request grants
+      # (RFC 6749 §6). No-op unless the refresh_token_scopes column exists.
+      def refresh_token_scopes_match?(access_token, scopes)
+        return true unless refresh_token_scopes_supported?
+        return true if access_token.refresh_token.blank?
+
+        access_token.refresh_token_scopes == scopes
+      end
+
+      # RFC 8707: an existing token's audience must match the requested
+      # resource indicators to be reused. Blank on both sides means
+      # unrestricted and matches; one blank side is a mismatch; otherwise
+      # compared as sorted sets.
+      def resource_indicators_match?(token, requested_resource)
+        token_resource = token.try(:resource)
+
+        return true if token_resource.blank? && requested_resource.blank?
+        return false if token_resource.blank? || requested_resource.blank?
+
+        token_resource.split.sort == requested_resource.split.sort
+      end
+
+      # RFC 8707: supported only when the `resource` column exists (added by
+      # the `doorkeeper:resource_indicators` generator).
+      def resource_indicators_supported?
+        column_names.include?("resource")
+      end
+
+      # RFC 6749 §6: supported only when the `refresh_token_scopes` column
+      # exists (added by the `doorkeeper:refresh_token_scopes` generator).
+      def refresh_token_scopes_supported?
+        column_names.include?("refresh_token_scopes")
+      end
+
       def authorized_tokens_for(application_id, resource_owner)
         by_resource_owner(resource_owner).where(application_id: application_id,
               revoked_at: nil).order(Sequel.desc(:created_at))
@@ -142,10 +192,14 @@ module DoorkeeperSequel
           # nil ignores custom attributes when matching, an empty hash only
           # matches tokens that have no custom attributes set.
           custom_attributes = extract_custom_attributes(token_attributes)
+          requested_resource = token_attributes[:resource]
+
           access_token = matching_token_for(
             application, resource_owner, scopes,
             custom_attributes: custom_attributes, include_expired: false
-          )
+          ) do |token|
+            token_reusable_for_request?(token, token_attributes, scopes, application, requested_resource)
+          end
           return access_token if access_token&.reusable?
         end
 
@@ -154,6 +208,25 @@ module DoorkeeperSequel
           resource_owner: resource_owner,
           scopes: scopes,
           **token_attributes
+        )
+      end
+
+      # Extra predicates a candidate token must satisfy to be reused. Each
+      # guard degrades to a no-op on Doorkeeper versions / schemas that lack
+      # the corresponding feature, so this works on both 5.x and 6.0.
+      def token_reusable_for_request?(token, token_attributes, scopes, application, requested_resource)
+        refresh_token_matches?(token, token_attributes) &&
+          refresh_token_scopes_match?(token, scopes) &&
+          resource_indicators_match?(token, requested_resource) &&
+          within_public_client_expires_in?(application, token)
+      end
+
+      def within_public_client_expires_in?(application, token)
+        token_authorization = ::Doorkeeper::OAuth::Authorization::Token
+        return true unless token_authorization.respond_to?(:within_public_client_expires_in?)
+
+        token_authorization.within_public_client_expires_in?(
+          Doorkeeper.config, application, token
         )
       end
 
@@ -227,6 +300,40 @@ module DoorkeeperSequel
       self.class.extract_custom_attributes(attributes.symbolize_keys)
     end
 
+    # Scope the refresh token was issued with (RFC 6749 §6). Falls back to the
+    # access token scope when the `refresh_token_scopes` column is absent or
+    # empty (rows predating the migration, or older Doorkeeper).
+    def refresh_token_scopes
+      stored = refresh_token_scopes_string
+      return scopes if stored.blank?
+
+      Doorkeeper::OAuth::Scopes.from_string(stored)
+    end
+
+    # Stores the granted refresh-token scope, normalized like `scopes`.
+    # Ignored when the column is absent so assigning it ahead of the migration
+    # keeps the fallback behaviour instead of raising.
+    def refresh_token_scopes=(value)
+      return unless self.class.refresh_token_scopes_supported?
+
+      normalized =
+        if value.is_a?(Array)
+          Doorkeeper::OAuth::Scopes.from_array(value).to_s
+        else
+          Doorkeeper::OAuth::Scopes.from_string(value.to_s).to_s
+        end
+
+      @refresh_token_scopes_assigned = normalized.present?
+      self[:refresh_token_scopes] = normalized
+    end
+
+    # Raw `refresh_token_scopes` column value, nil when the column is absent.
+    def refresh_token_scopes_string
+      return unless self.class.refresh_token_scopes_supported?
+
+      self[:refresh_token_scopes]
+    end
+
     # It indicates whether the tokens have the same credential
     def same_credential?(access_token)
       application_id == access_token.application_id &&
@@ -278,6 +385,15 @@ module DoorkeeperSequel
     end
 	
     def generate_refresh_token
+      # A refresh token issued outside the refresh grant starts its chain with
+      # the granted (access token) scope. The refresh grant assigns the scope
+      # explicitly to carry the presented token's scope forward. Written each
+      # time on validation of a new record (not just when blank) so a scope
+      # narrowed between #valid? and #save can't leave a wider stored value.
+      if self.class.refresh_token_scopes_supported? && !@refresh_token_scopes_assigned
+        self[:refresh_token_scopes] = scopes.to_s
+      end
+
       @raw_refresh_token = UniqueToken.generate
       secret_strategy.store_secret(self, :refresh_token, @raw_refresh_token)
     end

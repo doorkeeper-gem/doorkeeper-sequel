@@ -39,6 +39,12 @@ class ExtensionIntegrator
       FileUtils.rm("spec/dummy/config/initializers/new_framework_defaults.rb", force: true)
       FileUtils.rm("spec/models/doorkeeper/base_record_spec.rb", force: true)
       FileUtils.rm("spec/lib/orm/active_record/stale_records_cleaner_spec.rb", force: true)
+      # ActiveRecord-only specs that have no Sequel counterpart: they build
+      # ActiveRecord::Base models, use Arel-based SQL generators, or test the
+      # AR table-name/polymorphic reflection APIs directly.
+      FileUtils.rm("spec/lib/models/concerns/expiration_time_sql_math_spec.rb", force: true)
+      FileUtils.rm("spec/models/doorkeeper/polymorphic_resource_owner_spec.rb", force: true)
+      FileUtils.rm_rf("spec/lib/doorkeeper/orm/active_record")
       # Remove generators specs because we are using our own
       FileUtils.rm(Dir.glob("spec/generators/*.rb"))
     end

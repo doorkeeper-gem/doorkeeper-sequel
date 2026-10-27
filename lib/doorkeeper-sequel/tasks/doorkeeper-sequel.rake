@@ -36,5 +36,20 @@ namespace :doorkeeper_sequel do
     task :polymorphic_resource_owner do
       DoorkeeperSequel::PolymorphicResourceOwnerGenerator.start
     end
+
+    desc "Add resource indicators (RFC 8707) support to Access tokens and grants"
+    task :resource_indicators do
+      DoorkeeperSequel::ResourceIndicatorsGenerator.start
+    end
+
+    desc "Add refresh_token_scopes column to Access tokens"
+    task :refresh_token_scopes do
+      DoorkeeperSequel::RefreshTokenScopesGenerator.start
+    end
+
+    desc "Add access_token_id reference to Access grants (grant reuse revocation)"
+    task :grant_reuse_revocation do
+      DoorkeeperSequel::GrantReuseRevocationGenerator.start
+    end
   end
 end
